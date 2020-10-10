@@ -1,15 +1,54 @@
-/**
- * Copyright 2016-present, Facebook, Inc.
- * All rights reserved.
- *
- * This source code is licensed under the license found in the
- * LICENSE file in the root directory of this source tree.
- */
 
 var bodyParser = require('body-parser');
 var express = require('express');
 var app = express();
+const nodemailer = require('nodemailer');
+const process = require('process');
 var xhub = require('express-x-hub');
+
+const YOUR_EMAIL_ADDRESS = "leads@adfusion.cloud"
+const SEND_TO = ["jordin@kelley-law.net", "adam@adfusion.cloud", "sam@adfusion.cloud"]
+    const transporter = nodemailer.createTransport({
+        host: 'smtp.gmail.com',
+        port: 465,
+        secure: true,
+        auth: {
+            type: 'OAuth2',
+            user: YOUR_EMAIL_ADDRESS,
+            serviceClient: process.env.CLIENT_ID,
+            privateKey: process.env.PRIVATE_KEY,
+        },
+    });
+
+const bizSdk = require('facebook-nodejs-business-sdk');
+const Lead = bizSdk.Lead;
+
+const access_token = process.env.FACEBOOK_TOKEN || '<ACCESS_TOKEN>';
+const api = bizSdk.FacebookAdsApi.init(access_token);
+const showDebugingInfo = true; // Setting this to true shows more debugging info.
+if (showDebugingInfo) {
+  api.setDebug(true);
+}
+
+const logApiCallResult = (apiCallName, data) => {
+  console.log(apiCallName);
+  if (showDebugingInfo) {
+    console.log('Data:' + JSON.stringify(data));
+  }
+};
+
+let fields, params;
+fields = [
+];
+params = {
+};
+const sample_code =  (new Lead("434959580802348")).get(
+  // fields,
+  // params
+).then(data => console.log(data));
+logApiCallResult('sample_code api call complete.', sample_code);
+
+
 
 app.set('port', (process.env.PORT || 5000));
 app.listen(app.get('port'));
@@ -36,18 +75,32 @@ app.get(['/facebook', '/instagram'], function(req, res) {
   }
 });
 
-app.post('/facebook', function(req, res) {
+app.post('/facebook', async function(req, res) {
   console.log('Facebook request body:', req.body);
 
-  if (!req.isXHubValid()) {
-    console.log('Warning - request header X-Hub-Signature not present or invalid');
-    res.sendStatus(401);
-    return;
-  }
-
-  console.log('request header X-Hub-Signature validated');
   // Process the Facebook updates here
   received_updates.unshift(req.body);
+ 
+  (new Lead(req.body.entry[0].changes[0].value.leadgen_id)).get().then(async (data) => {
+    
+    try {
+        await transporter.verify();
+        await transporter.sendMail({
+            from: YOUR_EMAIL_ADDRESS,
+            to: SEND_TO,
+            subject: 'Lead Form',
+            text: `There is a new lead from ${data.field_data[0].values[0]} and their phone number is ${data.field_data[1].values[0]}. `,
+        });
+    } catch (err) {
+        console.error(err);
+    }
+
+  });
+
+    
+
+  
+
   res.sendStatus(200);
 });
 
@@ -59,4 +112,4 @@ app.post('/instagram', function(req, res) {
   res.sendStatus(200);
 });
 
-app.listen();
+app.listen(8080);
